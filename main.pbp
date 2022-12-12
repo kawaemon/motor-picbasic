@@ -16,30 +16,32 @@ false con 1
 high_ con 1
 low_  con 0
 
-CMCON = 7
+CMCON  = 7
 ADCON0 = 0
 ADCON1 = %00000110
-TRISA = %000010
-TRISB = %11111111
-TRISC = 0
-TRISD = %00001111
-TRISE = %100
+TRISA  = %000010
+TRISB  = %11111111
+TRISC  = 0
+TRISD  = %00001111
+TRISE  = %100
 
-var_wa     var word
-var_ba     var byte
-var_bb     var byte
-var_bc     var byte
-arg_wa     var word
-arg_ba     var byte
-ret_ba     var byte
+var_wa var word
+var_ba var byte
+var_bb var byte
+var_bc var byte
 
-ENTER      con 2
-NO_PRESS   con 3
-numpad     var portd
-pwm_freq   con 2000
+arg_wa var word
+arg_ba var byte
+
+ret_ba var byte
+
+ENTER    con 10
+NO_PRESS con 11
+
+numpad   var portd
+pwm_freq con 2000
 
 lcd_buffer var byte[32]
-
 
 main:
     gosub read_numpad
@@ -55,8 +57,8 @@ main:
     goto main
 
 apply_lcd:
-    ; clear display, move cursor to home position
-    lcdout $fe, $1, $fe, $2
+    ; move cursor to home position
+    lcdout $fe, $2
 
     for var_ba = 0 to 15
         lcdout lcd_buffer[var_ba]
@@ -123,5 +125,6 @@ read_numpad:
         ret_ba = ENTER
         return
     endif
+
     ret_ba = NO_PRESS
     return
