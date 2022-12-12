@@ -1,0 +1,69 @@
+define OSC 20
+
+define LCD_DREG      PORTC
+define LCD_DBIT      4
+define LCD_RSREG     PORTC
+define LCD_RSBIT     0
+define LCD_EREG      PORTC
+define LCD_EBIT      3
+define LCD_BITS      4
+define LCD_LINES     2
+define LCD_COMMANDUS 2000
+define LCD_DATAUS    50
+
+true  con 0
+false con 1
+high_ con 1
+low_  con 0
+
+CMCON = 7
+ADCON0 = 0
+ADCON1 = %00000110
+TRISA = %000010
+TRISB = %11111111
+TRISC = 0
+TRISD = %00001111
+TRISE = %100
+
+var_wa     var word
+var_ba     var byte
+var_bb     var byte
+var_bc     var byte
+arg_wa     var word
+arg_ba     var byte
+
+pwm_freq   con 2000
+
+lcd_buffer var byte[32]
+
+var_bb = 0
+
+main:
+    var_ba = 0
+    for var_ba = 0 to 32
+        lcd_buffer[var_ba] = "0" + var_bb
+    next var_ba
+
+    gosub apply_lcd
+    var_bb = var_bb + 1
+    if var_bb = 10 then
+        var_bb = 0
+    endif
+
+    pause 500
+    goto main
+
+apply_lcd:
+    ; clear display, move cursor to home position
+    lcdout $fe, $1, $fe, $2
+
+    for var_ba = 0 to 15
+        lcdout lcd_buffer[var_ba]
+    next var_ba
+    
+    ; move to second line
+    lcdout $fe, $c0
+    for var_ba = 16 to 31
+        lcdout lcd_buffer[var_ba]
+    next var_ba
+    return
