@@ -31,26 +31,27 @@ var_bb     var byte
 var_bc     var byte
 arg_wa     var word
 arg_ba     var byte
+ret_ba     var byte
 
+ENTER      con 2
+NO_PRESS   con 3
+numpad     var portd
 pwm_freq   con 2000
 
 lcd_buffer var byte[32]
 
-var_bb = 0
 
 main:
+    gosub read_numpad
+
     var_ba = 0
-    for var_ba = 0 to 32
-        lcd_buffer[var_ba] = "0" + var_bb
+    for var_ba = 0 to 31
+        lcd_buffer[var_ba] = "0" + ret_ba
     next var_ba
 
     gosub apply_lcd
-    var_bb = var_bb + 1
-    if var_bb = 10 then
-        var_bb = 0
-    endif
 
-    pause 500
+    pause 50
     goto main
 
 apply_lcd:
@@ -60,10 +61,67 @@ apply_lcd:
     for var_ba = 0 to 15
         lcdout lcd_buffer[var_ba]
     next var_ba
-    
+
     ; move to second line
     lcdout $fe, $c0
+
     for var_ba = 16 to 31
         lcdout lcd_buffer[var_ba]
     next var_ba
+    return
+
+read_numpad:
+    portd = (portd & ~%01110000) | %00010000
+    var_ba = portd & %00001110
+    if var_ba = %00001000 then
+        ret_ba = 1
+        return
+    endif
+    if var_ba = %00000100 then
+        ret_ba = 4
+        return
+    endif
+    if var_ba = %00000010 then
+        ret_ba = 7
+        return
+    endif
+
+    portd = (portd & ~%01110000) | %00100000
+    var_ba = portd & %00001111
+    if var_ba = %00001000 then
+        ret_ba = 2
+        return
+    endif
+    if var_ba = %00000100 then
+        ret_ba = 5
+        return
+    endif
+    if var_ba = %00000010 then
+        ret_ba = 8
+        return
+    endif
+    if var_ba = %00000001 then
+        ret_ba = 0
+        return
+    endif
+
+    portd = (portd & ~%01110000) | %01000000
+    var_ba = portd & %00001111
+    if var_ba = %00001000 then
+        ret_ba = 3
+        return
+    endif
+    if var_ba = %00000100 then
+        ret_ba = 6
+        return
+    endif
+    if var_ba = %00000010 then
+        ret_ba = 9
+        return
+    endif
+    if var_ba = %00000001 then
+        ret_ba = ENTER
+        return
+    endif
+    ret_ba = NO_PRESS
     return
