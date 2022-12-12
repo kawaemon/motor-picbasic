@@ -33,28 +33,215 @@ var_bc var byte
 arg_wa var word
 arg_ba var byte
 
+ret_wa var word
 ret_ba var byte
 
 ENTER    con 10
 NO_PRESS con 11
+ALT      con 12
+
+MAX_RPM  con 6000
 
 numpad   var portd
 pwm_freq con 2000
 
 lcd_buffer var byte[32]
 
+current_duty_cycle var byte
+current_duty_cycle = 0
+
+current_motor_reg_value var byte
+current_motor_reg_value = 0
+
+MOTOR_STATE_CW    con 1
+MOTOR_STATE_CCW   con 2
+MOTOR_STATE_BRAKE con 3
+current_motor_state var byte
+current_motor_state = MOTOR_STATE_CW
+
+target_motor_reg_value var byte
+target_motor_reg_value = 2000
+
+gui_is_showing_reg_value var bit
+gui_is_showing_reg_value = false
+
+gui_is_input_mode var bit
+gui_is_input_mode = false
+
+gui_before_input var byte
+gui_before_input = NO_PRESS
+
+; index: 3210
+; value: 8843
+gui_input_buffer var byte[4]
+gui_input_index  var byte ; points to 4 first
+
 main:
-    gosub read_numpad
-
-    var_ba = 0
-    for var_ba = 0 to 31
-        lcd_buffer[var_ba] = "0" + ret_ba
-    next var_ba
-
+    gosub handle_input
+    gosub draw
     gosub apply_lcd
 
     pause 50
     goto main
+
+handle_input:
+    gosub read_numpad
+    if ret_ba = NO_PRESS || ret_ba = gui_before_input then
+        return
+    endif
+    gui_before_input = ret_ba
+
+    if gui_is_input_mode then
+        if ret_ba = ALT then return
+        if ret_ba = ENTER then
+            gui_is_input_mode = false
+            var_wa = 1000 * gui_input_buffer[3] + 100 * gui_input_buffer[2] + 10 * gui_input_buffer[1] + gui_input_buffer[0]
+
+            if gui_is_showing_reg_value then
+                if 0 <= var_wa && var_wa <= 255     then target_motor_reg_value = var_wa
+            else
+                if 0 <= var_wa && var_wa <= MAX_RPM then target_motor_reg_value = 10 * var_wa / 208
+            endif
+
+            return
+        endif
+        if gui_input_index > 0 then
+            gui_input_index = gui_input_index - 1
+            gui_input_buffer[gui_input_index] = ret_ba
+        endif
+        return
+    endif
+
+    if ret_ba = ALT then
+        gui_is_showing_reg_value = not gui_is_showing_reg_value
+        return
+    endif
+    if ret_ba = ENTER then
+        gui_is_input_mode = true
+        gui_input_index = 4
+        return
+    endif
+
+    return
+
+; 0123456789012345
+; CCW t=xxxxc=xxxx
+; CCW rt=xxxrc=xxx
+; d=xxx ##########
+; BRAKING
+; 6789012345678901
+draw:
+    for var_ba = 0 to 31
+        lcd_buffer[var_ba] = " "
+    next var_ba
+
+    if current_motor_state = MOTOR_STATE_CW then
+        lcd_buffer[0] = "C"
+        lcd_buffer[1] = "W"
+    elseif current_motor_state = MOTOR_STATE_CW then
+        lcd_buffer[0] = "C"
+        lcd_buffer[1] = "C"
+        lcd_buffer[2] = "W"
+    elseif current_motor_state = MOTOR_STATE_BRAKE then
+        lcd_buffer[0] = "B"
+        lcd_buffer[1] = "R"
+        lcd_buffer[2] = "K"
+    endif
+
+    if gui_is_showing_reg_value then
+        lcd_buffer[4] = "r"
+        lcd_buffer[5] = "t"
+        lcd_buffer[6] = "="
+        arg_wa = target_motor_reg_value
+        arg_ba = 7
+        gosub dec3
+
+        lcd_buffer[10] = "r"
+        lcd_buffer[11] = "c"
+        lcd_buffer[12] = "="
+        arg_wa = current_motor_reg_value
+        arg_ba = 13
+        gosub dec3
+    else
+        lcd_buffer[4] = "t"
+        lcd_buffer[5] = "="
+        arg_ba = current_motor_reg_value
+        gosub reg_to_rpm
+        arg_wa = ret_wa
+        arg_ba = 6
+        gosub dec4
+
+        lcd_buffer[10] = "c"
+        lcd_buffer[11] = "="
+        arg_ba = target_motor_reg_value
+        gosub reg_to_rpm
+        arg_wa = ret_wa
+        arg_ba = 12
+        gosub dec4
+    endif
+
+    if gui_is_input_mode then
+        if gui_is_showing_reg_value then
+            lcd_buffer[16] = "r"
+            lcd_buffer[17] = "t"
+            lcd_buffer[18] = "="
+        else
+            lcd_buffer[17] = "t"
+            lcd_buffer[18] = "="
+        endif
+        lcd_buffer[19] = gui_input_buffer[3]
+        lcd_buffer[20] = gui_input_buffer[2]
+        lcd_buffer[21] = gui_input_buffer[1]
+        lcd_buffer[22] = gui_input_buffer[0]
+        return
+    endif
+
+    if current_motor_state = MOTOR_STATE_BRAKE then
+        lcd_buffer[16] = "B"
+        lcd_buffer[17] = "R"
+        lcd_buffer[18] = "A"
+        lcd_buffer[19] = "K"
+        lcd_buffer[20] = "I"
+        lcd_buffer[21] = "N"
+        lcd_buffer[22] = "G"
+        return
+    endif
+
+    lcd_buffer[16] = "d"
+    lcd_buffer[17] = "="
+
+    arg_wa = current_duty_cycle
+    gosub dec3
+
+    for var_ba = 22 to (22 + (current_duty_cycle / 25) - 1)
+        lcd_buffer[var_ba] = "#"
+    next var_ba
+    return
+
+; arg_wa = value, will be modified
+; arg_ba = lcd_buffer index
+dec3:
+    lcd_buffer[arg_ba] = arg_wa / 100
+    arg_wa = arg_wa // 100
+    lcd_buffer[arg_ba + 1] = arg_wa / 10
+    arg_wa = arg_wa // 10
+    lcd_buffer[arg_ba + 2] = arg_wa
+    return
+
+; arg_wa = value, will be modified
+; arg_ba = lcd_buffer index, will be modified
+dec4:
+    lcd_buffer[arg_ba] = arg_wa / 1000
+    arg_wa = arg_wa // 1000
+    arg_ba = arg_ba + 1
+    gosub dec3
+    return
+
+; arg_ba = register value
+; ret_wa = rpm
+reg_to_rpm
+    ret_wa = 208 * arg_ba / 10
+    return
 
 apply_lcd:
     ; move cursor to home position
@@ -72,9 +259,10 @@ apply_lcd:
     next var_ba
     return
 
+; ret_ba = input
 read_numpad:
     portd = (portd & ~%01110000) | %00010000
-    var_ba = portd & %00001110
+    var_ba = portd & %00001111
     if var_ba = %00001000 then
         ret_ba = 1
         return
@@ -85,6 +273,10 @@ read_numpad:
     endif
     if var_ba = %00000010 then
         ret_ba = 7
+        return
+    endif
+    if var_ba = %00000001 then
+        ret_ba = ALT
         return
     endif
 
