@@ -43,8 +43,15 @@ ALT      con 12
 
 MAX_RPM  con 6000
 
-numpad   var portd
-PWM_FREQ con 2000
+numpad        var portd
+cw_ccw_switch var porta.1
+
+PWM_FREQ          con 2000
+FEEDBACK_KP       con 10
+MAINLOOP_DELAY_MS con 50
+
+; how many ticks to hold motor on cw/ccw switching
+MOTOR_STOP_TICK_COUNT con 20
 
 lcd_buffer var byte[32]
 
@@ -77,18 +84,19 @@ gui_before_input = NO_PRESS
 gui_input_buffer var byte[4]
 gui_input_index  var byte ; points to 4 first
 
-feedback_kp con 10
+motor_stop_counter var byte
 
 main:
     gosub read_motor_state
     gosub update_control
     gosub apply_control
 
-    gosub handle_input
+    gosub handle_switch_input
+    gosub handle_gui_input
     gosub draw
     gosub apply_lcd
 
-    pause 50
+    pause MAINLOOP_DELAY_MS
     goto main
 
 read_motor_state:
@@ -96,10 +104,16 @@ read_motor_state:
     return
 
 update_control:
+    if current_motor_state = MOTOR_STATE_BRAKE then
+        ; reset state
+        current_duty_cycle = 0
+        return
+    endif
+
     arg_ba = target_motor_reg_value
     arg_bb = current_motor_reg_value
     gosub saturating_sub
-    current_duty_cycle = feedback_kp * ret_ba
+    current_duty_cycle = FEEDBACK_KP * ret_ba
     return
 
 apply_control:
@@ -125,7 +139,29 @@ saturating_sub:
     endif
     return
 
-handle_input:
+; handle cw/ccw mode switch input
+handle_switch_input:
+    if current_motor_state = MOTOR_STATE_BRAKE then
+        if current_motor_reg_value = 0 then
+            motor_stop_counter = motor_stop_counter + 1
+        endif
+        if motor_stop_counter = MOTOR_STOP_TICK_COUNT then
+            if cw_ccw_switch = high_ then
+                current_motor_state = MOTOR_STATE_CW
+            else
+                current_motor_state = MOTOR_STATE_CCW
+            endif
+        endif
+        return
+    endif
+
+    if (cw_ccw_switch = high_ && current_motor_state != MOTOR_STATE_CW) || (cw_ccw_switch = low_ && current_motor_state != MOTOR_STATE_CCW) then
+        current_motor_state = MOTOR_STATE_BRAKE
+        motor_stop_counter = 0
+    endif
+    return
+
+handle_gui_input:
     gosub read_numpad
     if ret_ba = NO_PRESS || ret_ba = gui_before_input then
         return
