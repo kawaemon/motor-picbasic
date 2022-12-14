@@ -32,6 +32,7 @@ var_bc var byte
 
 arg_wa var word
 arg_ba var byte
+arg_bb var byte
 
 ret_wa var word
 ret_ba var byte
@@ -43,7 +44,7 @@ ALT      con 12
 MAX_RPM  con 6000
 
 numpad   var portd
-pwm_freq con 2000
+PWM_FREQ con 2000
 
 lcd_buffer var byte[32]
 
@@ -76,13 +77,53 @@ gui_before_input = NO_PRESS
 gui_input_buffer var byte[4]
 gui_input_index  var byte ; points to 4 first
 
+feedback_kp con 10
+
 main:
+    gosub read_motor_state
+    gosub update_control
+    gosub apply_control
+
     gosub handle_input
     gosub draw
     gosub apply_lcd
 
     pause 50
     goto main
+
+read_motor_state:
+    current_motor_reg_value = portb
+    return
+
+update_control:
+    arg_ba = target_motor_reg_value
+    arg_bb = current_motor_reg_value
+    gosub saturating_sub
+    current_duty_cycle = feedback_kp * ret_ba
+    return
+
+apply_control:
+    if current_motor_state = MOTOR_STATE_CW then
+        hpwm 2, 0, PWM_FREQ
+        hpwm 1, current_duty_cycle, PWM_FREQ
+    elseif current_motor_state = MOTOR_STATE_CCW then
+        hpwm 1, 0, PWM_FREQ
+        hpwm 2, current_duty_cycle, PWM_FREQ
+    elseif current_motor_state = MOTOR_STATE_BRAKE then
+        hpwm 1, 255, PWM_FREQ
+        hpwm 2, 255, PWM_FREQ
+    endif
+    return
+
+; arg_ba - arg_bb -> ret_ba
+; if < 0 -> 0
+saturating_sub:
+    if arg_ba < arg_bb then
+        ret_ba = 0
+    else
+        ret_ba = arg_ba - arg_bb
+    endif
+    return
 
 handle_input:
     gosub read_numpad
