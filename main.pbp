@@ -48,6 +48,7 @@ cw_ccw_switch var porta.1
 
 PWM_FREQ          con 2000
 FEEDBACK_KP       con 10
+FEEDBACK_KI       con 5
 MAINLOOP_DELAY_MS con 5
 
 ; how many ticks to hold motor on cw/ccw switching
@@ -68,7 +69,7 @@ current_motor_state var byte
 current_motor_state = MOTOR_STATE_CW
 
 target_motor_reg_value var byte
-target_motor_reg_value = 2000
+target_motor_reg_value = 100
 
 gui_is_showing_reg_value var bit
 gui_is_showing_reg_value = false
@@ -85,6 +86,10 @@ gui_input_buffer var byte[4]
 gui_input_index  var byte ; points to 4 first
 
 motor_stop_counter var byte
+
+neg_offset con 127
+integral var byte
+integral = 0
 
 main:
     ;goto test_numpad
@@ -126,6 +131,23 @@ update_control:
     else
         current_duty_cycle = FEEDBACK_KP * ret_ba
     endif
+
+    arg_ba = integral
+    arg_bb = FEEDBACK_KI
+    if target_motor_reg_value > current_motor_reg_value then
+       gosub saturating_add
+       integral = ret_ba
+    endif
+    if target_motor_reg_value < current_motor_reg_value then
+       gosub saturating_sub
+       integral = ret_ba
+    endif
+
+    arg_ba = current_duty_cycle
+    arg_bb = integral
+    gosub saturating_add
+    current_duty_cycle = ret_ba
+
     return
 
 apply_control:
@@ -148,7 +170,7 @@ apply_control:
 ; arg_ba + arg_bb -> ret_ba
 ; if > 255 -> 255
 saturating_add:
-    if 255 - arg_ba > arg_bb then
+    if 255 - arg_ba < arg_bb then
         ret_ba = 255
     else
         ret_ba = arg_ba + arg_bb
@@ -209,6 +231,8 @@ handle_gui_input:
             else
                 if 0 <= var_wa && var_wa <= MAX_RPM then target_motor_reg_value = 10 * var_wa / 208
             endif
+
+            integral = 0
 
             return
         endif
@@ -332,9 +356,13 @@ draw:
     arg_ba = 18
     gosub dec3_
 
-    for var_ba = 22 to (22 + (current_duty_cycle / 25) - 1)
-        lcd_buffer[var_ba] = "#"
-    next var_ba
+    arg_wa = integral
+    arg_ba = 23
+    gosub dec3_
+    
+    ;for var_ba = 22 to (22 + (current_duty_cycle / 25) - 1)
+    ;    lcd_buffer[var_ba] = "#"
+    ;next var_ba
     return
 
 ; arg_wa = value, will be modified
