@@ -11,10 +11,10 @@ matplotlib.use("tkagg")
 frames = 5000
 simulation_interval = 10 # ms
 
-air_brake_constant = 3
+air_brake_constant = 0.01
 motor_power_constant = 3
 kp = 4
-ki = 1 / 20
+ki = 0
 kd = 0
 
 class Box:
@@ -44,7 +44,7 @@ class Motor:
         error = (self.target_rpm - current_rpm)
         self.integral += error
 
-        p = kp * error
+        p = max(kp * error, 0)
         i = ki * self.integral
         d = kd * (error - self.derivative)
         output = p + i + d
@@ -53,7 +53,7 @@ class Motor:
 
         return PidResponse(p, i, d, output)
 
-fig,axes = pyplot.subplots(3)
+fig,axes = pyplot.subplots(4)
 ax = axes[0]
 obj1, = ax.plot([],[],'o')
 obj2, = ax.plot([],[],'x')
@@ -63,19 +63,26 @@ ax.set_ylim(0, 5)
 ax.set_aspect('equal')
 
 ax = axes[1]
-integralHistoryObj, = ax.plot([], [])
+proportionalHistoryObj, = ax.plot([], [])
 ax.set_xlim(0, 1000)
-l = 100
+l = 10
 ax.set_ylim(-l, l)
 
 ax = axes[2]
+integralHistoryObj, = ax.plot([], [])
+ax.set_xlim(0, 1000)
+l = 400
+ax.set_ylim(-l, l)
+
+ax = axes[3]
 derivativeHistoryObj, = ax.plot([], [])
 ax.set_xlim(0, 1000)
-l = 200
+l = 20
 ax.set_ylim(-l, l)
 
 box = Box()
 motor = Motor()
+proportionalHistory = []
 integralHistory = []
 derivativeHistory = []
 
@@ -91,13 +98,16 @@ def update(frame_num):
 
     obj1.set_data((box.velocity, 2.5,))
 
+    proportionalHistory.append(pid.p)
+    proportionalHistoryObj.set_data(list(range(len(proportionalHistory))), proportionalHistory[:])
+
     integralHistory.append(pid.i)
     integralHistoryObj.set_data(list(range(len(integralHistory))), integralHistory[:])
 
     derivativeHistory.append(pid.d)
     derivativeHistoryObj.set_data(list(range(len(derivativeHistory))), derivativeHistory[:])
 
-    return obj1, integralHistoryObj, derivativeHistoryObj
+    return obj1, proportionalHistoryObj, integralHistoryObj, derivativeHistoryObj
 
 _animation = FuncAnimation(fig, update, frames=frames, interval=simulation_interval, blit=True, repeat=True)
 pyplot.show()
