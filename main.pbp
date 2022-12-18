@@ -80,6 +80,18 @@ gui_is_input_mode = false
 gui_before_input var byte
 gui_before_input = NO_PRESS
 
+gui_shown_rc var byte
+gui_shown_rc = 0
+
+gui_shown_duty var byte
+gui_shown_duty = 0
+
+GUI_REFRESH_TICK_COUNT con 100
+
+gui_refresh_counter var byte
+gui_refresh_counter = GUI_REFRESH_TICK_COUNT
+
+
 ; index: 3210
 ; value: 8843
 gui_input_buffer var byte[4]
@@ -265,6 +277,13 @@ handle_gui_input:
 ; BRAKING
 ; 6789012345678901
 draw:
+    gui_refresh_counter = gui_refresh_counter - 1
+    if gui_refresh_counter = 0 then
+        gui_shown_rc = current_motor_reg_value
+        gui_shown_duty = current_duty_cycle
+        gui_refresh_counter = GUI_REFRESH_TICK_COUNT
+    endif
+
     for var_ba = 0 to 31
         lcd_buffer[var_ba] = " "
     next var_ba
@@ -297,7 +316,7 @@ draw:
         lcd_buffer[10] = "r"
         lcd_buffer[11] = "c"
         lcd_buffer[12] = "="
-        arg_wa = current_motor_reg_value
+        arg_wa = gui_shown_rc
         arg_ba = 13
         gosub dec3_
     else
@@ -311,7 +330,7 @@ draw:
 
         lcd_buffer[10] = "c"
         lcd_buffer[11] = "="
-        arg_ba = current_motor_reg_value
+        arg_ba = gui_shown_rc
         gosub reg_to_rpm
         arg_wa = ret_wa
         arg_ba = 12
@@ -352,17 +371,13 @@ draw:
     lcd_buffer[16] = "d"
     lcd_buffer[17] = "="
 
-    arg_wa = current_duty_cycle
+    arg_wa = gui_shown_duty
     arg_ba = 18
     gosub dec3_
 
-    arg_wa = integral
-    arg_ba = 23
-    gosub dec3_
-    
-    ;for var_ba = 22 to (22 + (current_duty_cycle / 25) - 1)
-    ;    lcd_buffer[var_ba] = "#"
-    ;next var_ba
+    for var_ba = 22 to (22 + (gui_shown_duty / 25) - 1)
+        lcd_buffer[var_ba] = "#"
+    next var_ba
     return
 
 ; arg_wa = value, will be modified
