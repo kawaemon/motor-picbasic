@@ -52,7 +52,7 @@ FEEDBACK_KI       con 5
 MAINLOOP_DELAY_MS con 5
 
 ; how many ticks to hold motor on cw/ccw switching
-MOTOR_STOP_TICK_COUNT con 200
+MOTOR_STOP_TICK_COUNT con 100
 
 lcd_buffer var byte[32]
 
@@ -85,6 +85,12 @@ gui_shown_rc = 0
 
 gui_shown_duty var byte
 gui_shown_duty = 0
+
+gui_shown_target_rpm var word
+gui_shown_target_rpm = 0
+
+gui_is_set_target_rpm var bit
+gui_is_set_target_rpm = false
 
 GUI_REFRESH_TICK_COUNT con 100
 
@@ -240,8 +246,11 @@ handle_gui_input:
 
             if gui_is_showing_reg_value then
                 if 0 <= var_wa && var_wa <= 255     then target_motor_reg_value = var_wa
+                gui_is_set_target_rpm = false
             else
                 if 0 <= var_wa && var_wa <= MAX_RPM then target_motor_reg_value = 10 * var_wa / 208
+                gui_is_set_target_rpm = true
+                gui_shown_target_rpm = var_wa
             endif
 
             integral = 0
@@ -322,9 +331,15 @@ draw:
     else
         lcd_buffer[4] = "t"
         lcd_buffer[5] = "="
-        arg_ba = target_motor_reg_value
-        gosub reg_to_rpm
-        arg_wa = ret_wa
+
+        if gui_is_set_target_rpm then
+            arg_wa = gui_shown_target_rpm
+        else
+            arg_ba = target_motor_reg_value
+            gosub reg_to_rpm
+            arg_wa = ret_wa
+        endif
+
         arg_ba = 6
         gosub dec4_
 
